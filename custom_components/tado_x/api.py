@@ -61,6 +61,7 @@ class TadoXApi:
         self._home_id: int | None = None
         self._has_auto_assist = has_auto_assist
         self._on_token_refresh = on_token_refresh
+        self._lock = asyncio.Lock()
 
         # Initialize API call tracking with persistence support
         # Tado resets quotas at 12:00 UTC (noon), not midnight
@@ -327,72 +328,73 @@ class TadoXApi:
         url: str,
         json_data: dict | None = None,
     ) -> dict | list | None:
-        """Make an authenticated API request."""
-        await self._ensure_valid_token()
+        async with self._lock:
+            """Make an authenticated API request."""
+            await self._ensure_valid_token()
 
-        # Track API call
-        self._api_calls_today += 1
+            # Track API call
+            self._api_calls_today += 1
 
-        # Reset counter if past reset time (noon UTC)
-        now = datetime.now(timezone.utc)
-        if now >= self._api_call_reset_time:
-            self._api_calls_today = 1
-            self._api_call_reset_time = self._calculate_next_reset_time(now)
+            # Reset counter if past reset time (noon UTC)
+            now = datetime.now(timezone.utc)
+            if now >= self._api_call_reset_time:
+                self._api_calls_today = 1
+                self._api_call_reset_time = self._calculate_next_reset_time(now)
 
-        headers = {
-            "Authorization": f"Bearer {self._access_token}",
-            "Content-Type": "application/json",
-        }
+            headers = {
+                "Authorization": f"Bearer {self._access_token}",
+                "Content-Type": "application/json",
+            }
 
-        try:
-            async with self._session.request(
-                method,
-                url,
-                headers=headers,
-                json=json_data,
-            ) as response:
-                # Parse rate limit headers from Tado API
-                self._parse_rate_limit_headers(response.headers)
+            try:
+                async with self._session.request(
+                    method,
+                    url,
+                    headers=headers,
+                    json=json_data,
+                ) as response:
+                    # Parse rate limit headers from Tado API
+                    self._parse_rate_limit_headers(response.headers)
 
-                if response.status == 401:
-                    # Try to refresh token and retry
-                    await self.refresh_access_token()
-                    headers["Authorization"] = f"Bearer {self._access_token}"
-                    async with self._session.request(
-                        method,
-                        url,
-                        headers=headers,
-                        json=json_data,
-                    ) as retry_response:
-                        if retry_response.status != 200:
-                            text = await retry_response.text()
-                            raise TadoXApiError(f"API error: {retry_response.status} - {text}")
-                        if retry_response.content_length == 0:
-                            return None
-                        return await retry_response.json()
+                    if response.status == 401:
+                        # Try to refresh token and retry
+                        await self.refresh_access_token()
+                        headers["Authorization"] = f"Bearer {self._access_token}"
+                        async with self._session.request(
+                            method,
+                            url,
+                            headers=headers,
+                            json=json_data,
+                        ) as retry_response:
+                            if retry_response.status != 200:
+                                text = await retry_response.text()
+                                raise TadoXApiError(f"API error: {retry_response.status} - {text}")
+                            if retry_response.content_length == 0:
+                                return None
+                            return await retry_response.json()
 
-                if response.status == 429:
-                    # Rate limited - raise specific exception with reset time
-                    _LOGGER.warning(
-                        "Rate limit exceeded (429). Quota remaining: %s, Reset time: %s",
-                        self._api_quota_remaining,
-                        self._api_call_reset_time,
-                    )
-                    raise TadoXRateLimitError(
-                        "API rate limit exceeded (429). Please wait for quota reset.",
-                        reset_time=self._api_call_reset_time,
-                    )
+                    if response.status == 429:
+                        # Rate limited - raise specific exception with reset time
+                        _LOGGER.warning(
+                            "Rate limit exceeded (429). Quota remaining: %s, Reset time: %s",
+                            self._api_quota_remaining,
+                            self._api_call_reset_time,
+                        )
+                        raise TadoXRateLimitError(
+                            "API rate limit exceeded (429). Please wait for quota reset.",
+                            reset_time=self._api_call_reset_time,
+                        )
 
-                if response.status not in (200, 204):
-                    text = await response.text()
-                    raise TadoXApiError(f"API error: {response.status} - {text}")
+                    if response.status not in (200, 204):
+                        text = await response.text()
+                        raise TadoXApiError(f"API error: {response.status} - {text}")
 
-                if response.content_length == 0 or response.status == 204:
-                    return None
-                return await response.json()
+                    if response.content_length == 0 or response.status == 204:
+                        return None
+                    return await response.json()
 
-        except aiohttp.ClientError as err:
-            raise TadoXApiError(f"Network error: {err}") from err
+            except aiohttp.ClientError as err:
+                raise TadoXApiError(f"Network error: {err}") from err
 
     # My Tado API endpoints (user info)
     async def get_me(self) -> dict[str, Any]:

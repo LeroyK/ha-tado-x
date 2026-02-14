@@ -171,6 +171,7 @@ class TadoXDataUpdateCoordinator(DataUpdateCoordinator[TadoXData]):
         self.enable_air_comfort = enable_air_comfort
         self.enable_running_times = enable_running_times
         self.enable_flow_temp = enable_flow_temp
+        self.skip_update_once = False
 
         _LOGGER.info(
             "Tado X coordinator initialized with %d second update interval (%s tier)",
@@ -204,6 +205,11 @@ class TadoXDataUpdateCoordinator(DataUpdateCoordinator[TadoXData]):
 
     async def _async_update_data(self) -> TadoXData:
         """Fetch data from Tado X API."""
+        if self.skip_update_once:
+            self.skip_update_once = False
+            if self.data:
+                return self.data
+
         try:
             # Get rooms with current state (required)
             rooms_data = await self.api.get_rooms()
