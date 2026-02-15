@@ -293,6 +293,9 @@
       },
       "resume_schedules": {
         "name": "Resume Schedules"
+      },
+      "refresh_data": {
+        "name": "Refresh Data"
       }
     },
     "select": {

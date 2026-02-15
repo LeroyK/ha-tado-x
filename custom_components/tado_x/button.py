@@ -25,6 +25,12 @@ class TadoXButtonEntityDescription(ButtonEntityDescription):
     press_fn: Callable[[TadoXDataUpdateCoordinator], Awaitable[None]]
 
 
+async def _refresh_data(coordinator: TadoXDataUpdateCoordinator) -> None:
+    """Refresh coordinator data immediately."""
+    # async_request_refresh returns immediately, we don't need to await it
+    await coordinator.async_request_refresh()
+
+
 BUTTON_DESCRIPTIONS: tuple[TadoXButtonEntityDescription, ...] = (
     TadoXButtonEntityDescription(
         key="boost_all",
@@ -43,6 +49,12 @@ BUTTON_DESCRIPTIONS: tuple[TadoXButtonEntityDescription, ...] = (
         translation_key="resume_schedules",
         icon="mdi:calendar-clock",
         press_fn=lambda coordinator: coordinator.api.resume_all_schedules(),
+    ),
+    TadoXButtonEntityDescription(
+        key="refresh_data",
+        translation_key="refresh_data",
+        icon="mdi:refresh",
+        press_fn=_refresh_data,
     ),
 )
 
