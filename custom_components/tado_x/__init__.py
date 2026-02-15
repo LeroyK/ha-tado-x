@@ -259,10 +259,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         try:
             await coordinator.api.set_temperature_offset(device_serial, offset)
-            if coordinator.data:
+
+            # Update local temperature offset instead of refreshing from API
+            if coordinator.data and device_serial in coordinator.data.devices:
                 coordinator.data.devices[device_serial].temperature_offset = offset
-                coordinator.skip_update_once = True
-            await coordinator.async_request_refresh()
+
+                coordinator.data.api_calls_today = api.api_calls_today
+                coordinator.data.api_reset_time = api.api_reset_time
+                coordinator.data.has_auto_assist = api.has_auto_assist
+                coordinator.data.api_quota_limit = api.api_quota_limit
+                coordinator.data.api_quota_remaining = api.api_quota_remaining
+
+                save_api_stats()
+
+                coordinator.async_set_updated_data(coordinator.data)
+            else:
+                await coordinator.async_request_refresh()
+
             _LOGGER.info(
                 "Set temperature offset for device %s to %.1f°C",
                 device_serial,
