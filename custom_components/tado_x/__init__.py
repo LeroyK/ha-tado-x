@@ -19,6 +19,7 @@ from .const import (
     CONF_ACCESS_TOKEN,
     CONF_API_CALLS_TODAY,
     CONF_API_RESET_TIME,
+    CONF_API_RESET_TIME_OF_DAY,
     CONF_ENABLE_AIR_COMFORT,
     CONF_ENABLE_FLOW_TEMP,
     CONF_ENABLE_MOBILE_DEVICES,
@@ -30,6 +31,7 @@ from .const import (
     CONF_REFRESH_TOKEN,
     CONF_SCAN_INTERVAL,
     CONF_TOKEN_EXPIRY,
+    DEFAULT_API_RESET_TIME_OF_DAY,
     DOMAIN,
     PLATFORMS,
 )
@@ -118,6 +120,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         except (ValueError, TypeError):
             pass
 
+    # Get configured reset time of day (HH:mm format)
+    api_reset_time_of_day = entry.data.get(CONF_API_RESET_TIME_OF_DAY, DEFAULT_API_RESET_TIME_OF_DAY)
+
     # Create a mutable container for the API reference (needed for callback closure)
     api_container: dict[str, TadoXApi] = {}
 
@@ -146,6 +151,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         api_reset_time=api_reset_time,
         has_auto_assist=entry.data.get(CONF_HAS_AUTO_ASSIST, False),
         on_token_refresh=save_tokens,
+        api_reset_time_of_day=api_reset_time_of_day,
     )
     api_container["api"] = api
 

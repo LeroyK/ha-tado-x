@@ -17,6 +17,7 @@ from .const import (
     TADO_MINDER_API_URL,
     TADO_MY_API_URL,
     TADO_TOKEN_URL,
+    DEFAULT_API_RESET_TIME_OF_DAY
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -52,6 +53,7 @@ class TadoXApi:
         api_reset_time: datetime | None = None,
         has_auto_assist: bool = False,
         on_token_refresh: callable | None = None,
+        api_reset_time_of_day: str = DEFAULT_API_RESET_TIME_OF_DAY,
     ) -> None:
         """Initialize the API client."""
         self._session = session
@@ -63,8 +65,11 @@ class TadoXApi:
         self._on_token_refresh = on_token_refresh
         self._lock = asyncio.Lock()
 
+        # Parse reset time of day (format: "HH:mm")
+        self._reset_hour, self._reset_minute = self._parse_time_of_day(api_reset_time_of_day)
+
         # Initialize API call tracking with persistence support
-        # Tado resets quotas at 12:00 UTC (noon), not midnight
+        # Tado resets quotas at configured time UTC (default: 12:00 UTC/noon)
         now = datetime.now(timezone.utc)
         default_reset_time = self._calculate_next_reset_time(now)
 
@@ -136,12 +141,45 @@ class TadoXApi:
         """Return the API quota remaining from headers (if available)."""
         return self._api_quota_remaining
 
+    def set_reset_time_of_day(self, time_str: str) -> None:
+        """Update the API reset time of day.
+
+        Args:
+            time_str: Time in "HH:mm" format (e.g., "12:00")
+        """
+        self._reset_hour, self._reset_minute = self._parse_time_of_day(time_str)
+        # Recalculate the next reset time with the new settings
+        now = datetime.now(timezone.utc)
+        self._api_call_reset_time = self._calculate_next_reset_time(now)
+
     @staticmethod
-    def _calculate_next_reset_time(now: datetime) -> datetime:
+    def _parse_time_of_day(time_str: str) -> tuple[int, int]:
+        """Parse time string in HH:mm format.
+
+        Args:
+            time_str: Time in "HH:mm" format (e.g., "12:00")
+
+        Returns:
+            Tuple of (hour, minute)
+        """
+        try:
+            parts = time_str.split(":")
+            if len(parts) != 2:
+                raise ValueError(f"Invalid time format: {time_str}")
+            hour = int(parts[0])
+            minute = int(parts[1])
+            if not (0 <= hour <= 23 and 0 <= minute <= 59):
+                raise ValueError(f"Invalid time values: {time_str}")
+            return hour, minute
+        except (ValueError, AttributeError) as err:
+            _LOGGER.warning("Invalid time format '%s', using default 12:00: %s", time_str, err)
+            return 12, 0
+
+    def _calculate_next_reset_time(self, now: datetime) -> datetime:
         """Calculate the next API quota reset time.
 
-        Tado resets quotas at 12:00 UTC (noon). This method calculates
-        the next reset time based on the current time.
+        Tado resets quotas at configured time UTC (default: 12:00 UTC/noon).
+        This method calculates the next reset time based on the current time.
 
         Args:
             now: Current datetime in UTC
@@ -149,12 +187,15 @@ class TadoXApi:
         Returns:
             Next reset time as datetime in UTC
         """
-        # Reset time is 12:00 UTC
-        reset_hour = 12
-        today_reset = now.replace(hour=reset_hour, minute=0, second=0, microsecond=0)
+        today_reset = now.replace(
+            hour=self._reset_hour,
+            minute=self._reset_minute,
+            second=0,
+            microsecond=0
+        )
 
         if now >= today_reset:
-            # Already past today's reset, next reset is tomorrow at noon
+            # Already past today's reset, next reset is tomorrow
             return today_reset + timedelta(days=1)
         else:
             # Today's reset hasn't happened yet
