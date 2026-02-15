@@ -167,6 +167,15 @@
       "heating_time_today": {
         "name": "Heating Time Today"
       },
+      "next_schedule_start": {
+        "name": "Next Schedule Start"
+      },
+      "next_schedule_temperature": {
+        "name": "Next Schedule Temperature"
+      },
+      "next_time_block": {
+        "name": "Next Time Block"
+      },
       "battery": {
         "name": "Battery",
         "state": {
@@ -265,6 +274,9 @@
       },
       "overlay_active": {
         "name": "Manual Control"
+      },
+      "next_schedule_power": {
+        "name": "Next Schedule Power"
       },
       "connectivity": {
         "name": "Connectivity"

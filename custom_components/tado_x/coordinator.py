@@ -55,6 +55,8 @@ class TadoXRoom:
     open_window_detected: bool = False
     next_schedule_change: str | None = None
     next_schedule_temperature: float | None = None
+    next_schedule_power: str | None = None
+    next_time_block: str | None = None
     devices: list[TadoXDevice] = field(default_factory=list)
     # Running times data (heating duration today)
     running_time_today_seconds: int = 0
@@ -294,6 +296,11 @@ class TadoXDataUpdateCoordinator(DataUpdateCoordinator[TadoXData]):
                 next_change_setting = next_change.get("setting") or {}
                 next_change_temp_obj = next_change_setting.get("temperature") or {}
                 next_change_temp = next_change_temp_obj.get("value")
+                next_change_power = next_change_setting.get("power")
+
+                # Get next time block (use 'or {}' to handle None values)
+                next_time_block_obj = room_data.get("nextTimeBlock") or {}
+                next_time_block = next_time_block_obj.get("start")
 
                 # Get heating power and connection (use 'or {}' to handle None values)
                 heating_power_data = room_data.get("heatingPower") or {}
@@ -315,6 +322,8 @@ class TadoXDataUpdateCoordinator(DataUpdateCoordinator[TadoXData]):
                     open_window_detected=room_data.get("openWindow") is not None,
                     next_schedule_change=next_change_time,
                     next_schedule_temperature=next_change_temp,
+                    next_schedule_power=next_change_power,
+                    next_time_block=next_time_block,
                 )
 
                 # Add devices for this room
