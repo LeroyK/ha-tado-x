@@ -10,6 +10,7 @@ import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.core import callback
+from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import TadoXApi, TadoXAuthError
@@ -269,68 +270,61 @@ class TadoXOptionsFlow(OptionsFlow):
         if user_input is not None:
             has_auto_assist = user_input[CONF_HAS_AUTO_ASSIST]
             custom_interval = user_input.get(CONF_SCAN_INTERVAL)
+
+            # Time selector returns HH:MM:SS format, store as-is
             api_reset_time_of_day = user_input.get(CONF_API_RESET_TIME_OF_DAY, DEFAULT_API_RESET_TIME_OF_DAY)
 
-            # Validate time format
-            try:
-                time_parts = api_reset_time_of_day.split(":")
-                if len(time_parts) != 2:
-                    raise ValueError("Invalid time format")
-                hour = int(time_parts[0])
-                minute = int(time_parts[1])
-                if not (0 <= hour <= 23 and 0 <= minute <= 59):
-                    raise ValueError("Invalid time values")
-            except (ValueError, AttributeError):
-                errors[CONF_API_RESET_TIME_OF_DAY] = "invalid_time_format"
+            # Get feature toggles
+            enable_weather = user_input.get(CONF_ENABLE_WEATHER, has_auto_assist)
+            enable_mobile_devices = user_input.get(CONF_ENABLE_MOBILE_DEVICES, has_auto_assist)
+            enable_air_comfort = user_input.get(CONF_ENABLE_AIR_COMFORT, has_auto_assist)
+            enable_running_times = user_input.get(CONF_ENABLE_RUNNING_TIMES, has_auto_assist)
+            enable_flow_temp = user_input.get(CONF_ENABLE_FLOW_TEMP, has_auto_assist)
 
-            if not errors:
-                # Get feature toggles
-                enable_weather = user_input.get(CONF_ENABLE_WEATHER, has_auto_assist)
-                enable_mobile_devices = user_input.get(CONF_ENABLE_MOBILE_DEVICES, has_auto_assist)
-                enable_air_comfort = user_input.get(CONF_ENABLE_AIR_COMFORT, has_auto_assist)
-                enable_running_times = user_input.get(CONF_ENABLE_RUNNING_TIMES, has_auto_assist)
-                enable_flow_temp = user_input.get(CONF_ENABLE_FLOW_TEMP, has_auto_assist)
-
-                # Determine scan interval: custom if set, otherwise based on tier
-                if custom_interval and custom_interval > 0:
-                    scan_interval = custom_interval
-                else:
-                    scan_interval = (
-                        SCAN_INTERVAL_AUTO_ASSIST if has_auto_assist
-                        else SCAN_INTERVAL_FREE_TIER
-                    )
-
-                # Update the config entry data
-                new_data = {
-                    **self.config_entry.data,
-                    CONF_HAS_AUTO_ASSIST: has_auto_assist,
-                    CONF_SCAN_INTERVAL: scan_interval,
-                    CONF_API_RESET_TIME_OF_DAY: api_reset_time_of_day,
-                    CONF_ENABLE_WEATHER: enable_weather,
-                    CONF_ENABLE_MOBILE_DEVICES: enable_mobile_devices,
-                    CONF_ENABLE_AIR_COMFORT: enable_air_comfort,
-                    CONF_ENABLE_RUNNING_TIMES: enable_running_times,
-                    CONF_ENABLE_FLOW_TEMP: enable_flow_temp,
-                }
-                self.hass.config_entries.async_update_entry(
-                    self.config_entry,
-                    data=new_data,
+            # Determine scan interval: custom if set, otherwise based on tier
+            if custom_interval and custom_interval > 0:
+                scan_interval = custom_interval
+            else:
+                scan_interval = (
+                    SCAN_INTERVAL_AUTO_ASSIST if has_auto_assist
+                    else SCAN_INTERVAL_FREE_TIER
                 )
 
-                # Update the coordinator if it exists
-                if self.config_entry.entry_id in self.hass.data.get(DOMAIN, {}):
-                    coordinator = self.hass.data[DOMAIN][self.config_entry.entry_id]
-                    coordinator.api.has_auto_assist = has_auto_assist
-                    coordinator.api.set_reset_time_of_day(api_reset_time_of_day)
-                    coordinator.update_scan_interval(scan_interval)
-                    # Update feature flags
-                    coordinator.enable_weather = enable_weather
-                    coordinator.enable_mobile_devices = enable_mobile_devices
-                    coordinator.enable_air_comfort = enable_air_comfort
-                    coordinator.enable_running_times = enable_running_times
-                    coordinator.enable_flow_temp = enable_flow_temp
+            # Update the config entry data
+            new_data = {
+                **self.config_entry.data,
+                CONF_HAS_AUTO_ASSIST: has_auto_assist,
+                CONF_SCAN_INTERVAL: scan_interval,
+                CONF_API_RESET_TIME_OF_DAY: api_reset_time_of_day,
+                CONF_ENABLE_WEATHER: enable_weather,
+                CONF_ENABLE_MOBILE_DEVICES: enable_mobile_devices,
+                CONF_ENABLE_AIR_COMFORT: enable_air_comfort,
+                CONF_ENABLE_RUNNING_TIMES: enable_running_times,
+                CONF_ENABLE_FLOW_TEMP: enable_flow_temp,
+            }
+            self.hass.config_entries.async_update_entry(
+                self.config_entry,
+                data=new_data,
+            )
 
-                return self.async_create_entry(title="", data={})
+            # Update the coordinator if it exists
+            if self.config_entry.entry_id in self.hass.data.get(DOMAIN, {}):
+                coordinator = self.hass.data[DOMAIN][self.config_entry.entry_id]
+                coordinator.api.has_auto_assist = has_auto_assist
+                coordinator.api.set_reset_time_of_day(api_reset_time_of_day)
+                coordinator.update_scan_interval(scan_interval)
+                # Update feature flags
+                coordinator.enable_weather = enable_weather
+                coordinator.enable_mobile_devices = enable_mobile_devices
+                coordinator.enable_air_comfort = enable_air_comfort
+                coordinator.enable_running_times = enable_running_times
+                coordinator.enable_flow_temp = enable_flow_temp
+
+                if coordinator.data:
+                    coordinator.data.api_reset_time = coordinator.api.api_reset_time
+                    coordinator.async_set_updated_data(coordinator.data)
+
+            return self.async_create_entry(title="", data={})
 
         current_auto_assist = self.config_entry.data.get(CONF_HAS_AUTO_ASSIST, False)
         current_interval = self.config_entry.data.get(CONF_SCAN_INTERVAL, 0)
@@ -366,7 +360,7 @@ class TadoXOptionsFlow(OptionsFlow):
                     vol.Optional(
                         CONF_API_RESET_TIME_OF_DAY,
                         default=current_api_reset_time,
-                    ): str,
+                    ): selector.TimeSelector(),
                     vol.Required(
                         CONF_ENABLE_WEATHER,
                         default=current_enable_weather,

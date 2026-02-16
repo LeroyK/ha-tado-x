@@ -46,7 +46,7 @@
         "data": {
           "has_auto_assist": "Auto-Assist subscription",
           "scan_interval": "Update interval (seconds)",
-          "api_reset_time_of_day": "API quota reset time (HH:mm UTC)",
+          "api_reset_time_of_day": "API quota reset time (UTC)",
           "enable_weather": "Enable weather sensors",
           "enable_mobile_devices": "Enable mobile device tracking",
           "enable_air_comfort": "Enable air comfort sensors",
@@ -55,7 +55,7 @@
         "data_description": {
           "has_auto_assist": "Enable this if you have an Auto-Assist subscription. This will automatically adjust the update interval.",
           "scan_interval": "How often to poll the Tado API (in seconds). Minimum: 30s, Maximum: 3600s (1 hour). Without Auto-Assist, keep at 2700s (45 min) to stay under 5000 requests/day.",
-          "api_reset_time_of_day": "Time when Tado resets the daily API quota in UTC (24-hour format). Default is 12:00 (noon UTC).",
+          "api_reset_time_of_day": "Time when Tado resets the daily API quota (in UTC timezone). Default is 12:00 noon UTC.",
           "enable_weather": "Enables outdoor temperature, solar intensity, and weather state sensors. Uses 1 API call per update.",
           "enable_mobile_devices": "Enables device trackers for mobile phones with geofencing. Uses 1 API call per update.",
           "enable_air_comfort": "Enables air freshness and comfort level sensors per room. Uses 1 API call per update.",
