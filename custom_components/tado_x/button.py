@@ -26,9 +26,8 @@ class TadoXButtonEntityDescription(ButtonEntityDescription):
 
 
 async def _refresh_data(coordinator: TadoXDataUpdateCoordinator) -> None:
-    """Refresh coordinator data immediately."""
-    # async_request_refresh returns immediately, we don't need to await it
-    await coordinator.async_request_refresh()
+    """Refresh coordinator data by calling the refresh_data service."""
+    await coordinator.hass.services.async_call(DOMAIN, "refresh_data")
 
 
 BUTTON_DESCRIPTIONS: tuple[TadoXButtonEntityDescription, ...] = (

@@ -54,6 +54,7 @@ ATTR_START_DATE: Final = "start_date"
 ATTR_END_DATE: Final = "end_date"
 
 SERVICE_SET_CLIMATE_TIMER: Final = "set_climate_timer"
+SERVICE_REFRESH_DATA: Final = "refresh_data"
 ATTR_ENTITY_ID: Final = "entity_id"
 ATTR_TEMPERATURE: Final = "temperature"
 ATTR_DURATION: Final = "duration"
@@ -425,6 +426,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             SERVICE_SET_CLIMATE_TIMER,
             async_set_climate_timer,
             schema=SERVICE_SET_CLIMATE_TIMER_SCHEMA,
+        )
+
+    async def async_refresh_data(call: ServiceCall) -> None:
+        """Handle refresh_data service call."""
+        await coordinator.async_request_refresh()
+
+    # Register refresh data service (only once per integration)
+    if not hass.services.has_service(DOMAIN, SERVICE_REFRESH_DATA):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_REFRESH_DATA,
+            async_refresh_data,
         )
 
     # Create the "Home" device before loading platforms to ensure via_device references work
