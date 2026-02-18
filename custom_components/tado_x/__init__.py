@@ -279,7 +279,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
                 save_api_stats()
 
-                coordinator.async_set_updated_data(coordinator.data)
+                coordinator.async_update_listeners()
             else:
                 await coordinator.async_request_refresh()
 

@@ -322,7 +322,7 @@ class TadoXOptionsFlow(OptionsFlow):
 
                 if coordinator.data:
                     coordinator.data.api_reset_time = coordinator.api.api_reset_time
-                    coordinator.async_set_updated_data(coordinator.data)
+                    coordinator.async_update_listeners()
 
             return self.async_create_entry(title="", data={})
 
