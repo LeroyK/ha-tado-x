@@ -289,13 +289,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 offset,
             )
         except TadoXAuthError as err:
+            # Trigger reauthentication flow instead of just failing
+            # This will prompt the user to re-authenticate via the UI
             _LOGGER.error(
                 "Authentication error while setting temperature offset for device %s: %s",
                 device_serial,
                 err,
             )
-            raise HomeAssistantError(
-                f"Failed to set temperature offset: authentication error ({err})"
+            raise ConfigEntryAuthFailed(
+                f"Authentication failed: {err}. Please re-authenticate."
             ) from err
         except TadoXApiError as err:
             _LOGGER.error(
