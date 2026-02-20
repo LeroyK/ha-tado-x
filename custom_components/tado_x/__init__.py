@@ -288,6 +288,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 device_serial,
                 offset,
             )
+        except TadoXAuthError as err:
+            _LOGGER.error(
+                "Authentication error while setting temperature offset for device %s: %s",
+                device_serial,
+                err,
+            )
+            raise HomeAssistantError(
+                f"Failed to set temperature offset: authentication error ({err})"
+            ) from err
         except TadoXApiError as err:
             _LOGGER.error(
                 "Failed to set temperature offset for device %s: %s",
@@ -295,13 +304,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 err,
             )
             raise HomeAssistantError(f"Failed to set temperature offset for device: {err}") from err
-        except Exception as err:
-            _LOGGER.error(
-                "Failed to set temperature offset for device %s: %s",
-                device_serial,
-                err,
-            )
-            raise
 
     # Register temperature offset service (only once per integration)
     if not hass.services.has_service(DOMAIN, SERVICE_SET_TEMPERATURE_OFFSET):
