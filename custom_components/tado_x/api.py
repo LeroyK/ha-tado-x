@@ -64,6 +64,7 @@ class TadoXApi:
         self._has_auto_assist = has_auto_assist
         self._on_token_refresh = on_token_refresh
         self._lock = asyncio.Lock()
+        self._token_refresh_task: asyncio.Task | None = None
 
         # Parse reset time of day (format: "HH:mm:ss")
         self._reset_hour, self._reset_minute, self._reset_second = self._parse_time_of_day(api_reset_time_of_day)
@@ -302,6 +303,7 @@ class TadoXApi:
                         self._refresh_token = data.get("refresh_token")
                         expires_in = data.get("expires_in", 600)
                         self._token_expiry = datetime.now() + timedelta(seconds=expires_in)
+                        self._schedule_token_refresh()
                         return True
 
                     # Authorization pending, continue polling
@@ -350,10 +352,47 @@ class TadoXApi:
                     self._on_token_refresh()
 
                 _LOGGER.debug("Token refreshed successfully, expires in %s seconds", expires_in)
+                self._schedule_token_refresh()
                 return True
 
         except aiohttp.ClientError as err:
             raise TadoXAuthError(f"Network error during token refresh: {err}") from err
+
+    def _schedule_token_refresh(self) -> None:
+        """Schedule a background token refresh 60 seconds before the token expires."""
+        if self._token_refresh_task and not self._token_refresh_task.done():
+            self._token_refresh_task.cancel()
+
+        if not self._token_expiry:
+            return
+
+        delay = max(0.0, (self._token_expiry - timedelta(seconds=120) - datetime.now()).total_seconds())
+        self._token_refresh_task = asyncio.ensure_future(self._background_token_refresh(delay))
+        _LOGGER.debug("Scheduled background token refresh in %.0f seconds", delay)
+
+    async def _background_token_refresh(self, delay: float) -> None:
+        """Sleep until shortly before token expiry, then refresh proactively."""
+        try:
+            await asyncio.sleep(delay)
+            # Skip if a request already refreshed the token during the sleep
+            if self._token_expiry and datetime.now() < self._token_expiry - timedelta(seconds=120):
+                _LOGGER.debug("Token already refreshed by a request; rescheduling background refresh")
+                self._schedule_token_refresh()
+                return
+            _LOGGER.debug("Background token refresh triggered")
+            await self.refresh_access_token()
+        except asyncio.CancelledError:
+            pass
+        except TadoXAuthError as err:
+            _LOGGER.error("Background token refresh failed: %s", err)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("Unexpected error in background token refresh: %s", err)
+
+    def close(self) -> None:
+        """Cancel any pending background tasks."""
+        if self._token_refresh_task and not self._token_refresh_task.done():
+            self._token_refresh_task.cancel()
+            self._token_refresh_task = None
 
     async def _ensure_valid_token(self) -> bool:
         """Ensure we have a valid access token. Returns True if the token was refreshed."""
