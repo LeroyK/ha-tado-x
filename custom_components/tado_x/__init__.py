@@ -11,7 +11,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_DEVICE_ID, Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady, HomeAssistantError
-from homeassistant.helpers import config_validation as cv, device_registry as dr
+from homeassistant.helpers import config_validation as cv, device_registry as dr, entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import TadoXApi, TadoXApiError, TadoXAuthError
@@ -211,6 +211,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         api=api,
         home_id=home_id,
         home_name=home_name,
+        entry_id=entry.entry_id,
         save_api_stats_callback=save_api_stats,
         scan_interval=configured_scan_interval if configured_scan_interval else None,
         enable_weather=enable_weather,
@@ -367,7 +368,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         duration_minutes = call.data[ATTR_DURATION]
 
         # Get the entity from registry
-        from homeassistant.helpers import entity_registry as er
         entity_registry = er.async_get(hass)
         entity_entry = entity_registry.async_get(entity_id)
 
