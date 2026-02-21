@@ -65,6 +65,7 @@ class TadoXApi:
         self._on_token_refresh = on_token_refresh
         self._lock = asyncio.Lock()
         self._token_refresh_task: asyncio.Task | None = None
+        self._last_refresh_time: datetime | None = None
 
         # Parse reset time of day (format: "HH:mm:ss")
         self._reset_hour, self._reset_minute, self._reset_second = self._parse_time_of_day(api_reset_time_of_day)
@@ -346,6 +347,7 @@ class TadoXApi:
                 self._refresh_token = data.get("refresh_token", self._refresh_token)
                 expires_in = data.get("expires_in", 600)
                 self._token_expiry = datetime.now() + timedelta(seconds=expires_in)
+                self._last_refresh_time = datetime.now()
 
                 # Persist tokens immediately after refresh to prevent auth loss on restart
                 if self._on_token_refresh:
@@ -396,17 +398,14 @@ class TadoXApi:
             self._token_refresh_task.cancel()
             self._token_refresh_task = None
 
-    async def _ensure_valid_token(self) -> bool:
-        """Ensure we have a valid access token. Returns True if the token was refreshed."""
+    async def _ensure_valid_token(self) -> None:
+        """Ensure we have a valid access token."""
         if not self._access_token:
             raise TadoXAuthError("Not authenticated")
 
         # Refresh if token expires in less than 60 seconds
         if self._token_expiry and datetime.now() >= self._token_expiry - timedelta(seconds=60):
             await self.refresh_access_token()
-            return True
-
-        return False
 
     async def _request(
         self,
@@ -416,7 +415,7 @@ class TadoXApi:
     ) -> dict | list | None:
         async with self._lock:
             """Make an authenticated API request."""
-            token_proactively_refreshed = await self._ensure_valid_token()
+            await self._ensure_valid_token()
 
             # Track API call
             self._api_calls_today += 1
@@ -443,18 +442,22 @@ class TadoXApi:
                     self._parse_rate_limit_headers(response.headers)
 
                     if response.status == 401:
-                        # If the token was already proactively refreshed above and we still got
-                        # a 401, a second back-to-back refresh would send the brand-new refresh
-                        # token straight back to the server, which returns 400 (the token was
-                        # just issued and hasn't fully propagated yet on Tado's side).
-                        # In that case skip the second refresh and just retry with the current
-                        # access token — the 401 was likely a propagation race.
-                        if not token_proactively_refreshed:
-                            await self.refresh_access_token()
+                        # If the token was refreshed very recently (by _ensure_valid_token()
+                        # above, OR by the background refresh task just before this request),
+                        # the 401 is likely a server propagation delay — the brand-new access
+                        # token hasn't reached all Tado API nodes yet.  Immediately using the
+                        # brand-new *refresh* token in that window returns 400.
+                        # Instead, wait briefly and retry with the already-fresh access token.
+                        # Only call refresh_access_token() when no recent refresh has occurred,
+                        # meaning the token genuinely expired.
+                        recently_refreshed = (
+                            self._last_refresh_time is not None
+                            and datetime.now() - self._last_refresh_time < timedelta(seconds=30)
+                        )
+                        if recently_refreshed:
+                            await asyncio.sleep(1)
                         else:
-                            # Token was just refreshed but the server still returned 401,
-                            # likely a propagation delay. Wait a moment before retrying.
-                            await asyncio.sleep(3)
+                            await self.refresh_access_token()
                         headers["Authorization"] = f"Bearer {self._access_token}"
                         async with self._session.request(
                             method,
