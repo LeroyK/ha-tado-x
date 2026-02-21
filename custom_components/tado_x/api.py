@@ -374,13 +374,15 @@ class TadoXApi:
         """Sleep until shortly before token expiry, then refresh proactively."""
         try:
             await asyncio.sleep(delay)
-            # Skip if a request already refreshed the token during the sleep
-            if self._token_expiry and datetime.now() < self._token_expiry - timedelta(seconds=120):
-                _LOGGER.debug("Token already refreshed by a request; rescheduling background refresh")
-                self._schedule_token_refresh()
-                return
-            _LOGGER.debug("Background token refresh triggered")
-            await self.refresh_access_token()
+            async with self._lock:
+                # Re-check after acquiring the lock: a concurrent _request() call may have
+                # already refreshed the token while we were sleeping or waiting for the lock.
+                if self._token_expiry and datetime.now() < self._token_expiry - timedelta(seconds=120):
+                    _LOGGER.debug("Token already refreshed by a request; rescheduling background refresh")
+                    self._schedule_token_refresh()
+                    return
+                _LOGGER.debug("Background token refresh triggered")
+                await self.refresh_access_token()
         except asyncio.CancelledError:
             pass
         except TadoXAuthError as err:
