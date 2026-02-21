@@ -230,14 +230,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
-    # Register services
-    async def async_set_temperature_offset(call: ServiceCall) -> None:
-        """Handle set_temperature_offset service call."""
-        # Look up the current coordinator at call time so stale closures from a
-        # previous load (after an integration reload) never use an invalidated api.
+    def get_coordinator() -> TadoXDataUpdateCoordinator:
+        """Return the current coordinator, raising if the integration is not loaded."""
         coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id)
         if coordinator is None:
             raise HomeAssistantError("Tado X integration is not currently loaded")
+        return coordinator
+
+    # Register services
+    async def async_set_temperature_offset(call: ServiceCall) -> None:
+        """Handle set_temperature_offset service call."""
+        coordinator = get_coordinator()
 
         device_id = call.data[ATTR_DEVICE_ID]
         offset = call.data[ATTR_OFFSET]
@@ -327,9 +330,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     async def async_add_meter_reading(call: ServiceCall) -> None:
         """Handle add_meter_reading service call."""
-        coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id)
-        if coordinator is None:
-            raise HomeAssistantError("Tado X integration is not currently loaded")
+        coordinator = get_coordinator()
 
         reading = call.data[ATTR_READING]
         date = call.data.get(ATTR_DATE)
@@ -352,9 +353,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     async def async_set_eiq_tariff(call: ServiceCall) -> None:
         """Handle set_eiq_tariff service call."""
-        coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id)
-        if coordinator is None:
-            raise HomeAssistantError("Tado X integration is not currently loaded")
+        coordinator = get_coordinator()
 
         tariff = call.data[ATTR_TARIFF]
         unit = call.data[ATTR_UNIT]
@@ -379,9 +378,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     async def async_set_climate_timer(call: ServiceCall) -> None:
         """Handle set_climate_timer service call."""
-        coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id)
-        if coordinator is None:
-            raise HomeAssistantError("Tado X integration is not currently loaded")
+        coordinator = get_coordinator()
 
         entity_id = call.data[ATTR_ENTITY_ID]
         temperature = call.data[ATTR_TEMPERATURE]
@@ -454,11 +451,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     async def async_refresh_data(call: ServiceCall) -> None:
         """Handle refresh_data service call."""
-        coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id)
-        if coordinator is None:
-            raise HomeAssistantError("Tado X integration is not currently loaded")
-
-        await coordinator.async_request_refresh()
+        await get_coordinator().async_request_refresh()
 
     # Register refresh data service (only once per integration)
     if not hass.services.has_service(DOMAIN, SERVICE_REFRESH_DATA):
